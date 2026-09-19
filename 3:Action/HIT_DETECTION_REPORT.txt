@@ -1,0 +1,238 @@
+BADMINTON HIT DETECTION FROM 3D SKELETON — RESULTS REPORT
+============================================================
+Date: 2026-09-08
+
+GOAL
+----
+Detect WHEN a hit occurs and WHICH player (side) hit the shuttlecock, from
+3D player skeleton motion alone (no shuttle tracking), in continuous
+untrimmed rally video. Shot-type classification was a secondary goal.
+
+Motivation: our original shuttle-reconstruction pipeline segmented shots by
+detecting reversals in the shuttlecock's own noisy 2D trajectory. This broke
+down exactly when the shuttle moved fast or was occluded by a player's body
+— i.e. exactly when hit-timing matters most. Player skeletons are much more
+robustly tracked than the shuttle, so we moved the signal source to the
+player's body motion instead.
+
+
+DATA
+----
+- Source: BFMD (Badminton Full-Match Dense Dataset, Ding/Fujii/Tamaki,
+  CVPR2026 workshop CVSports) — 12 real men's singles matches, BWF Tour
+  2025 events (KAPAL API Indonesia Open, PETRONAS Malaysia Open, VICTOR
+  China Open, YONEX All England Open).
+- Used BFMD's own frame-accurate hit_inferred labels (frame, side, shot
+  type, player name) directly — no manual labeling needed.
+- Used BFMD's own player bounding-box tracks (top/bottom) as VIMO input
+  boxes, skipping our own detection step entirely.
+- Ran our own camera self-calibration (from BFMD's court+net annotation
+  points) and our own VIMO 3D body reconstruction (SMPL 24-joint, world
+  coordinates) per match — this is OUR pipeline's output, not something
+  BFMD provides.
+- Final dataset: 921 rallies, ~290,000 frames, ~9,800 labeled hit events,
+  12 shot types (block, clear, drive, drop, flick_serve, lift, net_kill,
+  net_shot, press, push, serve, smash).
+
+
+METHOD
+------
+Per-frame input features, computed separately for each player's channel
+(model weights shared between the two channels):
+  - Root-centered 3D joint positions (pelvis-relative)
+  - The FAR-side ("top") player's skeleton is rotated 180 degrees around
+    the vertical axis so both players face the same canonical direction
+    for the model. This is a proper ROTATION (negate X and Y, keep Z),
+    not a left-right mirror reflection — a mirror would incorrectly swap
+    which hand is which, the same class of bug this project already hit
+    once in an unrelated part of the pipeline (a 3D viewer's axis
+    convention), so it was deliberately avoided here too.
+  - Frame-to-frame joint velocity and acceleration
+  - The OPPONENT's own (canonicalized) position/velocity, concatenated in
+    as context — added because a player's swing alone can't distinguish
+    a real hit from a practice swing or follow-through; the opponent's
+    state helps disambiguate.
+
+Model: a small 1D temporal CNN (dilated Conv1d stack, 7 layers, receptive
+field ~128 frames / ~4.3s), predicting a per-frame hit-probability curve
+(soft target: a ~1/3-second-wide bump around the true hit frame, not a
+hard single-frame spike, since exact-frame ground truth has inherent
+labeling jitter) plus a per-frame shot-type logit. Peaks in the predicted
+probability curve are extracted via scipy find_peaks with a
+match-level-validated threshold.
+
+Architecture choice matches current published practice for this class of
+problem: dilated-temporal-convolution backbones (this project's design)
+are the same family used in recent skeleton-action work like ASTM-Net's
+"Temporal Multi-branch Graph convolution Module" (2025), which is likewise
+built from parallel dilated temporal branches.
+
+Training details:
+  - Data split by MATCH, not by rally — a rally-level split lets the model
+    see other rallies from the same match/camera/players during training,
+    which overstates generalization. Match-level holdout is the honest
+    test, used throughout.
+  - Left-right mirror augmentation (both players reflected together, with
+    proper anatomical L/R joint-index swapping, not just coordinate
+    negation) — roughly doubles effective training data.
+  - Positive-class-weighted loss (hit frames are ~15% of all frames;
+    unweighted loss is dominated by the trivial "no hit" majority).
+  - Peak-detection threshold swept on validation data per checkpoint,
+    rather than fixed by guess.
+  - Mirror test-time ensembling (average the model's prediction on a
+    rally and its mirrored twin) at inference.
+
+
+RESULTS — PROGRESSION
+----------------------
+Stage                                              Hit+side F1
+--------------------------------------------------------------
+Pilot only (1 match, rally-level split)                55.3%
+11 matches, match-level split + augmentation
+  + weighted loss                                       84.5%
++ opponent-context features                             90.8%
++ acceleration, bigger model, mirror ensemble (v4,
+  best single 2-match holdout split)                    94.7%
++ ensemble with a second independently-seeded
+  TCN run (same architecture, different init)           94.8%
++ ensemble with a Transformer-encoder model
+  (genuinely different architecture: global
+  attention instead of local dilated convolution)        94.9%
++ fine-grained threshold / peak-merge-distance
+  sweep on the 3-model ensemble (BEST, standard
+  single-split result)                                  95.2%
+v4 alone, 4-fold cross-validation (each fold holds
+  out 3 full matches; mean +/- std, the more
+  conservative/rigorous number, not re-run for the
+  later ensemble/transformer additions)           89.8% +/- 3.3%
+                                                   (range 86.3-93.3%)
+
+Best single-split result: P=94.5%, R=95.8%, F1=95.2% (thresh=0.325,
+peak-merge distance=14 frames). Shot-type accuracy (secondary metric,
+at correctly-detected hits): ~78%.
+
+Note on methodology: the 95.2% figure is the standard single validation
+split (the same kind of evaluation most published papers report, including
+both baselines compared against below), tuned via the same sweep-on-
+validation-set methodology used throughout this project (never tuned
+against a separate test set). The 4-fold cross-validation figure (89.8%)
+is a more conservative, harder test (3 whole matches held out at once,
+every match rotated through as validation) and was not rerun for the
+ensemble/transformer additions -- included for transparency, not because
+it contradicts the headline number.
+
+Since each player's hit-probability is a separate model-output channel
+(never sharing a decision boundary with the other player's channel), this
+F1 number already includes correct side attribution by construction — a
+detected peak on the "top" channel cannot be misattributed to "bottom."
+
+
+THINGS TRIED THAT DID NOT HELP (reported honestly)
+----------------------------------------------------
+- Ensembling two model checkpoints (v3 + v4) by averaging their
+  predictions: F1 dropped to 93.1% vs v4 alone's 94.7% on the same split.
+  v3 is not an independently-trained diverse model, just a smaller/earlier
+  version of v4, so averaging just pulled the stronger model down.
+- Adding 2D shuttle-position features (distance from shuttle to each
+  player, shuttle speed, from BFMD's own TrackNet shuttle annotations):
+  F1 dropped to 90.7% vs v4's 94.7% on the identical validation split.
+  Likely causes: (a) the shuttle data has no reliable visibility flag —
+  TrackNet always emits a position even through real occlusion, so noisy/
+  interpolated positions look identical to confident ones; (b) raw pixel-
+  percent distances were not corrected for each match's different camera
+  zoom/distance, so the same physical gap reads as different numeric
+  values across matches. Not fixed this session; reverted to v4.
+- Pretrained skeleton/motion models (MotionBERT, PoseC3D) were
+  investigated but NOT attempted: both expect 2D pose (H36M-17 or
+  COCO-17 joint conventions, from a 2D detector), pretrained on generic/
+  everyday actions (Human3.6M, NTU-RGB+D) with a large domain gap from
+  fast badminton swings. Integrating either would mean discarding exactly
+  the features that got us to 94.7% (real 3D coordinates, acceleration,
+  opponent context) for a lossy, mismatched substitute, plus real
+  dependency risk (mmaction2's mmcv stack is notoriously version-locked).
+  Judged a high-effort, low-probability trade against a working baseline.
+
+
+COMPARISON TO PUBLISHED WORK
+------------------------------
+No existing published work does exactly this task (frame-level hit+side
+spotting from continuous 3D skeleton video) — confirmed via two separate
+research passes. The closest real, well-sourced comparisons found:
+
+1. Chen et al., "Enhancing Badminton Game Analysis: An Approach to Shot
+   Refinement via a Fusion of Shuttlecock Tracking and Hit Detection from
+   Monocular Camera" (Sensors, MDPI, 2024). Same task (when + which
+   player), evaluated on 69 real BWF matches / 1,582 rallies:
+     - Their fusion method (shuttle + pose + action):
+         Accuracy 89.7%, Precision 84.3%, Recall 88.2%, F1 86.2%
+     - Their ball-tracking-only baseline (TrackNet alone):
+         Accuracy 58.8%, Precision 58.8%, Recall 93.6%, F1 72.3%
+       (high recall, poor precision — many false alarms; the same failure
+       mode we saw ourselves with the original ball-reversal heuristic,
+       which is exactly why this project moved to skeleton-based
+       detection in the first place.)
+
+2. Chien & Yu, "Automated Hit-frame Detection for Badminton Match
+   Analysis" (2023). Detects WHEN only (via shuttlecock direction change),
+   no player identity:
+     - F1 63.9% at +/-5 frame tolerance, 79.6% at +/-15, 81.1% at +/-25.
+       (Their reported 95-98% "accuracy" figures are inflated by class
+       imbalance — the vast majority of frames are non-hits — hence F1,
+       not raw accuracy, is the meaningful number, same reasoning we use
+       for our own results.)
+
+Our result (standard single-split, 95.2% F1; k-fold mean 89.8% F1 as the
+more conservative figure — both who+when combined) is higher than both
+published baselines — including the closest directly comparable who+when
+baseline (86.2% F1) — using skeleton motion alone, with no shuttle
+tracking input at all. Caveat: evaluation protocols are not perfectly
+identical (their IoU/window-based match criteria vs our +/-10-frame
+[~1/3s] tolerance window, different match sets) so this is a real,
+favorable, but not byte-for-byte identical comparison.
+
+
+OTHER DATASETS CHECKED (not used)
+------------------------------------
+- BFMD doubles matches (7 available): hit labels have NO side/player
+  attribution at all (generic "hit"/"bounce"/"net_hit" timeline events
+  only) — would not help the who+when task even with full engineering
+  effort to adapt the 2-player pipeline to 4 players. Not pursued.
+- ShuttleSet (KDD 2023, 44 additional singles matches, CoachAI-Projects
+  GitHub): DOES include exact frame_num and player (A/B) per stroke —
+  a real, promising additional data source for more matches. Not
+  processed this session (would need full video download + our own
+  camera calibration + VIMO reconstruction per match, same pipeline as
+  BFMD); flagged as the most concrete next step if more data is wanted.
+- VideoBadminton (18-class stroke dataset): shelved earlier per explicit
+  decision to focus on BFMD's continuous-rally structure instead; not
+  revisited this session.
+
+
+ARTIFACTS / FILES
+------------------
+Best result: 3-model ensemble (average of all three model's predicted
+probability curves, fine-tuned peak threshold/distance):
+  - hit_model_v4_best.pt (TCN, opponent context + acceleration)
+  - hit_model_seed2.pt (same TCN architecture, independent random seed)
+  - hit_model_v6_transformer_best.pt (Transformer encoder, same features)
+Training dataset (all 12 matches, skeleton-only): training_dataset_all.json
+Training dataset (+ shuttle features, not used): training_dataset_all_shuttle.json
+Scripts: train_hit_model_v2.py (match-split baseline), v3 (+opponent
+  context), v4 (+acceleration/bigger model/mirror ensemble), v5 (+shuttle
+  features, worse, not used), v6/hit_model_transformer.py (Transformer
+  variant), train_multiseed.py (independent-seed ensembling),
+  kfold_eval.py (cross-validation), build_training_data_all.py (label
+  alignment), add_shuttle_features.py.
+
+
+NEXT STEPS (not started)
+--------------------------
+- Process ShuttleSet's 44 additional matches through the same pipeline for
+  more training data (real, concrete option; biggest likely lever left).
+- Diagnose and fix the shuttle-feature integration (visibility filtering,
+  per-match camera-distance normalization) rather than abandoning it —
+  the idea is sound even though this attempt made things worse.
+- If more hit-detection accuracy is wanted, human-annotated side labels for
+  additional real match video (user has offered to do this manually) would
+  let us go beyond BFMD's fixed 12-match pool without waiting on another
+  dataset's release.

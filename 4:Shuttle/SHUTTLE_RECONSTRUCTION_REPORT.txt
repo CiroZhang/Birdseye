@@ -1,0 +1,162 @@
+PHYSICS-BASED 3D SHUTTLECOCK TRAJECTORY RECONSTRUCTION — RESULTS REPORT
+========================================================================
+Date: 2026-09-09
+
+GOAL
+----
+Reconstruct a 3D shuttlecock trajectory per shot (the interval between one
+real hit and the next, from BFMD's own hit_inferred labels), from a single
+broadcast camera, using our own self-detected court calibration and our own
+self-detected player 3D reconstruction from earlier sections of this project.
+
+
+CONTEXT: WHY THIS IS A FRESH BUILD
+------------------------------------
+An earlier phase of this project (documented only in Project/METHODS.md,
+dated 2026-09-06, before this session) describes a physics-based ballistic
+fit for shuttle trajectories on a different (non-BFMD) dataset, anchored by
+real 3D hand positions. That code could not be found anywhere -- not on the
+local machine, not on the Killarney cluster, in an extensive search. This
+report describes a fresh implementation built against the same physical
+model description, not a recovery of the original code.
+
+
+METHOD
+------
+**Physics model**: a shuttlecock in flight is a point mass under gravity
+plus quadratic aerodynamic drag: F_drag/m = -k*|v|*v. Badminton shuttles
+have unusually high drag for their mass (much higher than a low-drag ball)
+-- this is exactly what gives their characteristic flight shape (falls
+faster than it rises, unlike a near-parabolic trajectory).
+
+**Drag constant, calibrated not assumed**: at terminal velocity, drag
+balances gravity: k = g / v_terminal^2. A literature estimate of
+v_terminal=7.0 m/s (k=0.20) was the starting point, but the value was then
+calibrated against real data: swept v_terminal from 4-12.5 m/s, refitting
+150 real well-observed shots at each candidate value and measuring median
+reprojection error. Clear minimum at v_terminal=6.5 m/s (k=0.2322) --
+9.69px median reprojection error vs 10.00px for the literature guess, a
+modest but real ~3% improvement, with the fitted median speed staying
+physically sensible (62km/h) across the entire sweep rather than drifting
+to an unphysical regime to chase lower error.
+
+**Per-shot fit**: for each shot, gather every frame in [hit_frame,
+next_hit_frame] where BFMD's own shuttle annotation has a 2D pixel position,
+and nonlinear-least-squares fit an initial 3D position + velocity that,
+integrated through the drag+gravity model and reprojected through our
+self-detected camera (K, R, t), best explains those 2D pixels.
+
+**The critical fix -- two real 3D anchors, not one**: fitting position +
+velocity from 2D reprojection alone is exactly the classic monocular
+ambiguity this whole project has run into before (a fast-far trajectory can
+look pixel-identical to a slow-close one). The fix: anchor the fit with TWO
+real, measured 3D points -- the hitting player's own hand position at the
+hit frame, AND the receiving player's hand position at the next hit frame
+(both are wrist/hand joints straight out of our self-detected VIMO
+reconstruction from section 2, using whichever hand had the higher swing
+speed at that frame as the racket hand). Both anchors enter the least-
+squares residual as soft constraints (~0.15m slack, roughly a hand's size).
+
+Validated directly: on an initial 15-shot test, using only ONE anchor
+produced fits with physically impossible speeds (serves and net shots
+"reconstructed" at 700-1600 km/h -- an order of magnitude beyond even the
+badminton smash-speed world record). Adding the second anchor brought every
+one of those same shots down to a physically plausible 10-140 km/h range,
+with no other change to the method.
+
+**Safety nets**: a hard ceiling (170 m/s = 612 km/h) marks any fit that
+still diverges as invalid rather than reporting a nonsense number (this
+caught a real bug during development -- one shot's fit produced a velocity
+magnitude ~150 digits long from a numerical integrator instability, since
+fixed with a capped-deceleration term inside the ODE and a tighter
+integrator step). Even with this ceiling and the two-anchor fix, results
+still needed one more honest filter -- see below.
+
+
+DATA
+----
+12 BFMD singles matches (same set used for court/player/hit-detection
+sections), self-detected camera + self-detected player reconstruction from
+sections 1-2, BFMD's own 2D shuttle annotations (TrackNet-style, percent
+coordinates) as the raw 2D observation, BFMD's own hit_inferred labels to
+define shot boundaries (real supervision, same as the hit-detection model --
+there's no other way to know when a shot starts/ends).
+
+
+RESULTS
+-------
+9,594 shots fit across all 12 matches (98.7% with both anchors available --
+the small remainder only had the hitting player's anchor, near the very
+start/end of a rally).
+
+Honest filtering: even with the two-anchor fix and the hard ceiling, 459
+shots (4.8%) still landed above 300 km/h -- a generous but realistic
+ceiling for organic rally play (as opposed to a controlled smash-speed
+record attempt) -- and were excluded from the headline statistics below as
+likely residual fit artifacts (most plausibly from very short/noisy 2D
+observation windows, or an occasional bad hand-anchor frame). This is
+reported, not hidden.
+
+On the remaining 9,135 shots:
+  - Median reprojection error: 11.9px (mean 20.1px, pulled up by a longer
+    tail of noisier fits). 75.7% of shots have a good fit (<20px).
+  - Speed distribution: median 69 km/h, p5-p95 range 23-218 km/h.
+
+**Median speed by shot type** (the strongest validation signal -- this
+ordering was never told to the model, it falls straight out of the physics
+fit):
+    smash          183 km/h  (n=650)
+    press          152 km/h  (n=102)
+    drop           119 km/h  (n=781)
+    clear          107 km/h  (n=515)
+    drive           94 km/h  (n=716)
+    flick_serve     79 km/h  (n=61)
+    push            77 km/h  (n=431)
+    lift            73 km/h  (n=1863)
+    net_kill        71 km/h  (n=15)
+    block           61 km/h  (n=775)
+    serve           55 km/h  (n=610)
+    net_shot        42 km/h  (n=2616)
+
+This is exactly the real physical ordering of badminton shots: smash is by
+a wide margin the fastest shot in the sport, net_shot is the slowest (the
+shuttle barely clears the net), serve is deliberately controlled and slow.
+No part of the fitting method knows what these labels mean or what order to
+expect -- this ordering emerging cleanly from independently-fit trajectories
+is strong evidence the reconstruction is capturing something physically
+real, not just curve-fitting noise.
+
+
+DEMO
+----
+Published visualization (one rally, 9 shots, KAPAL API Indonesia Open, Shi
+Yu Qi vs Antonsen): video + real player skeletons + the reconstructed
+shuttle (a glowing marker with a fading trail showing its flight arc),
+with a banner showing each shot's type/side/speed as it happens, and an
+honest "noisy fit" flag on any shot whose reprojection error exceeds 25px
+(not hidden). https://claude.ai/code/artifact/d35999d8-aee6-41d1-9e23-ebfa907c3604
+
+
+HONEST LIMITATIONS
+--------------------
+- No 3D ground truth exists to validate against -- BFMD only annotates the
+  shuttle in 2D. Reprojection error is therefore a self-consistency check
+  (does the fitted 3D trajectory, seen through our camera, land where the
+  2D detector said the shuttle was), not an absolute 3D accuracy measure.
+  The shot-type speed ordering is the best available indirect validation.
+- 4.8% of shots still need post-hoc exclusion for implausible speed even
+  after the two-anchor fix and the hard ceiling -- the method isn't force-
+  fully self-correcting, it still fails visibly on some fraction of shots
+  (likely short/noisy shots, or a bad hand-anchor detection), and those
+  failures are filtered out rather than solved.
+- The drag constant is a single global value (a real physical property of
+  a standard shuttlecock), not adapted per shuttle brand/condition/wear,
+  which real matches would have some variation in.
+- Some individual fits, even "valid" ones, produce trajectories that dip
+  slightly below the floor (z<0) between anchor points -- the fit isn't
+  hard-constrained to stay physically above ground throughout, only pinned
+  at its two anchor points and consistent with the 2D observations between
+  them.
+- This is a fresh rebuild, not a validated continuation of the earlier
+  (lost) session's work -- there's no way to directly compare this
+  implementation's results against whatever the original approach achieved.

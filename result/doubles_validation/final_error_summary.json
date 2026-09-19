@@ -1,0 +1,56 @@
+{
+  "method": "back-view single-camera VIMO/SMPL 3D reconstruction, ankle ground-projected, compared against real top-view ground-truth CSV positions (nearest-neighbor matched per frame). Camera: one hand-calibrated pose (8 real annotated points, RMS 15.5px, solved via court_detection.py _solve_pose_and_focal) reused across all rallies/matches sharing the same fixed physical camera (confirmed identical framing across BD12 and BD13).",
+  "tolerance_rationale": "0.8m chosen as a body-scale tolerance: average adult male arm span ~1.8m, and a badminton player's reconstructed 'position' (foot/ankle) vs. the ground-truth annotation point can reasonably differ by less than half an arm span (~0.9m) given players often have an arm/racket extended -- 0.8m is a slightly conservative fraction of that.",
+  "per_rally": {
+    "BD12_Rally1": {
+      "n": 484,
+      "median_m": 0.3214216898870571,
+      "mean_m": 0.40509070778686956,
+      "p90_m": 1.0470216970311264,
+      "max_m": 2.3335128200850415,
+      "pct_within_0.8m": 83.26446280991735
+    },
+    "BD12_Rally5": {
+      "n": 273,
+      "median_m": 0.33070887985763625,
+      "mean_m": 0.37890095349455616,
+      "p90_m": 0.6631956987256526,
+      "max_m": 0.9014858490114912,
+      "pct_within_0.8m": 95.6043956043956
+    },
+    "BD12_Rally20": {
+      "n": 474,
+      "median_m": 0.40073075571612804,
+      "mean_m": 0.42719827477788375,
+      "p90_m": 0.6920288529251903,
+      "max_m": 1.1647481755545772,
+      "pct_within_0.8m": 96.20253164556962
+    },
+    "BD13_Rally2": {
+      "n": 500,
+      "median_m": 0.4741688357928443,
+      "mean_m": 0.5648044959786023,
+      "p90_m": 0.9436677353268113,
+      "max_m": 5.530770189309937,
+      "pct_within_0.8m": 82.6
+    }
+  },
+  "combined": {
+    "n": 1731,
+    "median_m": 0.38645379404529784,
+    "mean_m": 0.4531473674794204,
+    "p90_m": 0.8471222081052436,
+    "max_m": 5.530770189309937,
+    "pct_within_tolerance": {
+      "0.2m": 17.619872905834775,
+      "0.3m": 36.27960716348932,
+      "0.4m": 52.05083766608897,
+      "0.5m": 66.60889659156557,
+      "0.6m": 76.83419988445985,
+      "0.7m": 84.17099942229925,
+      "0.8m": 88.56152512998267,
+      "0.9m": 91.21894858463317,
+      "1.0m": 93.24090121317158
+    }
+  }
+}

@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/
+.idea/
+*.swp
+
+# logs / scratch output (calibrate_drag.log, shuttle_all.log, slurm_*.out, etc.)
+*.log
+slurm-*.out
+slurm_*.out
+
+# Jupyter
+.ipynb_checkpoints/
