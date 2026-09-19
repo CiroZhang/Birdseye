@@ -6,13 +6,11 @@ detectors rather than manual annotation.
 
 ## Demo
 
-```bash
-cd demo && ./serve.sh
-```
+**[Live demo](https://cirozhang.github.io/Birdseye/)** — or run locally: `cd docs && ./serve.sh`
 
-Opens a local page with three interactive views: live pose detection on broadcast footage,
-self-calibrated 3D player reconstruction validated against a real drone dataset, and physics-based
-shuttle trajectory reconstruction per shot.
+Three interactive views: live pose detection on broadcast footage, self-calibrated 3D player
+reconstruction validated against a real drone dataset, and physics-based shuttle trajectory
+reconstruction per shot.
 
 ## Results
 
@@ -69,6 +67,6 @@ python3 main.py [match_name]   # runs the full pipeline end to end on one match
 3:Action/       hit detection / shot classification
 4:Shuttle/      shuttle trajectory reconstruction
 5.Evalutation/  supplementary calibration/validation scripts
-demo/           interactive demo site
+docs/           interactive demo site (served via GitHub Pages)
 result/         evaluation outputs
 ```
