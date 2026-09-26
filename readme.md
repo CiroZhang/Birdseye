@@ -70,6 +70,12 @@ To further demonstrate the effectiveness of Birdseye's representation, we use a 
 
 † Results reported by the respective original papers, not re-evaluated under BFMD.
 
+
+## Future Work
+
+We are continuing to improve shuttlecock trajectory reconstruction in our section 4 and are developing a dataset to support its evaluation. We also found that MonoTrack and other existing court-detection methods can struggle when court colors differ from those seen during development or when parts of the court are out of frame. Future work will focus on making court detection more robust to these conditions.
+
+
 ## Datasets
 
 - **BFMD** — Ning Ding et al., *BFMD: A Full-Match Badminton Dense Dataset for Dense Shot
