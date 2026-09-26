@@ -1,72 +1,127 @@
 # Birdseye
+### Self-Detected End-to-End 3D Reconstruction and Analysis of Badminton Rallies
 
-Monocular 3D reconstruction and analysis of badminton rallies from single-camera broadcast video —
-court geometry, player pose, hit detection, and shuttle trajectory, each stage driven by our own
-detectors rather than manual annotation.
+---
 
-## Demo
+<p align="center">
+  <a href="https://cirozhang.github.io/Birdseye/">
+    <img src="https://img.shields.io/badge/▶_LIVE_DEMO-View_the_reconstruction_in_action-2ea44f?style=for-the-badge" alt="Live Demo">
+  </a>
+</p>
 
-**[Live demo](https://cirozhang.github.io/Birdseye/)** — or run locally: `cd docs && ./serve.sh`
+<p align="center"><b>cirozhang.github.io/Birdseye</b></p>
 
-Three interactive views: live pose detection on broadcast footage, self-calibrated 3D player
-reconstruction validated against a real drone dataset, and physics-based shuttle trajectory
-reconstruction per shot.
+---
 
-## Results
+## 1. Court Detection and Construction
 
-| Stage | Metric | Ours | Best published baseline |
-|---|---|---|---|
-| Court calibration | Mean IoU / MPE | **0.9875 / 2.45px** | 0.97 IoU (MonoTrack, CVPRW 2022) |
-| Hit detection (who + when) | F1 | **92.7%** | 86.2% (Chen et al., Sensors 2024) |
-| Shuttle trajectory | Median reprojection error | 11.9px (9,135 shots) | — (no directly comparable baseline) |
+MonoTrack's own court-line detector (Liu & Wang, 2022 [1]) finds 22 court-plane points + 2 net-pole
+points per video and estimates a camera from them. During testing we found its net-pole detection
+to be unreliable, so instead we use a VGGT [2] focal-length estimate as an additive seed for a
+RANSAC joint focal+pose solve over MonoTrack's 22 flat (non-pole) court points only and never its net
+detections. To evaluate the result, we then re-project the net using the solved camera and the
+known real net height, instead of trusting MonoTrack's own net-pole pixels. The following table
+shows the improvement this gives specifically on net position, on BFMD [8]:
 
-Full method and evaluation detail lives in each stage's `MANIFEST.md`. Different rows above are
-evaluated on different published test sets — see each section's manifest for the exact comparison
-basis.
+| Method | Mean IoU | MPE |
+|---|---|---|
+| MonoTrack (net detection) | 0.9518 | 4.6px |
+| MonoTrack + our net projection | **0.9622** | **2.9px** |
 
-## Pipeline
+## 2. Player Detection and 3D Reconstruction
 
-1. **Court** (`1:Court/`) — MonoTrack's court-line detector finds 22 court-plane points per video;
-   a RANSAC joint solve recovers camera focal length + pose from those points alone. The net is not
-   detected directly — its 3D position is reprojected from known court geometry through the solved
-   camera.
-2. **Player** (`2:Player/`) — YOLOv8x + YOLOv8x-pose locate both players, filtered to the real court
-   boundary using the calibrated camera. VIMO (from TRAM) reconstructs 3D pose per frame, fed our
-   camera directly instead of its own SLAM estimate; a ray-cast ground correction removes monocular
-   depth drift.
-3. **Action** (`3:Action/`) — A transformer over 3D skeleton motion (root-relative position,
-   velocity, acceleration, both players) predicts per-frame hit probability and shot type, trained
-   on BFMD's hit-timing labels.
-4. **Shuttle** (`4:Shuttle/`) — A physics-based (gravity + quadratic drag) trajectory fit per shot,
-   anchored at both players' hand positions at the bounding hits to resolve monocular depth
-   ambiguity.
+Birdseye uses a hybrid YOLOv8x + YOLOv8x-pose [9] scheme to locate both players, then, using the
+calibrated camera from Section 1, reconstructs 3D SMPL pose per frame with VIMO (from TRAM — Wang
+et al., ECCV 2024 [4]). To avoid picking up referees or spectators, any detected player outside the
+court boundary is rejected. A ray-cast ground correction then removes the vertical drift inherent
+to monocular depth estimation, anchoring each player's reconstructed foot to the known floor plane
+using a stable 2D ankle keypoint.
 
-## Setup
+On the badminton doubles dataset (Ding et al., 2023 [7]), which provides synchronized top-view and
+back-view drone footage, Birdseye reconstructs 3D player position from the back view alone and
+compares it against the top view's real annotated ground truth. Pooled across **4 rallies** (1,731
+frame-level position comparisons), median localization error is **0.39m** (mean 0.45m). Given that
+the average arm span of an adult male is roughly 1.8m, a meaningful share of this error is plausibly
+body-scale noise — a raised arm or racket alone can shift a player's "position" by a large fraction
+of that. The following table shows the percentage of frames within several tolerance thresholds:
 
-Requires two sibling repos alongside this one (same parent directory):
+| Tolerance | % of frames within |
+|---|---|
+| 0.5m | 66.6% |
+| 0.8m | 88.6% |
+| 1.0m | 93.2% |
 
-```
-Badminton LLM/
-├── Project/            (this repo)
-├── Dataset/BFMD/        BFMD_data — annotations + video
-└── monotrack/            court-detection binary (build/detect)
-```
+## 3. Hit Detection and Shot Classification
 
-Paths resolve relative to each script by default; override with `BFMD_DATA_ROOT` /
-`BFMD_SELFDETECTED_ROOT` env vars if your layout differs.
+To further demonstrate the effectiveness of Birdseye's representation, we use a transformer encoder
+(6 heads, 4 layers, 192-dim) over 3D skeleton motion — root-relative joint position, velocity,
+acceleration, for both players, with the far player canonically rotated 180° — to predict per-frame
+hit probability and shot type (12 classes), trained on BFMD's real hit-timing labels (the only
+manual annotation used anywhere in this pipeline).
 
-```bash
-python3 main.py [match_name]   # runs the full pipeline end to end on one match
-```
+**Train/test split:** match-level holdout, not rally-level (to prevent same-match/camera leakage) —
+1,055 rallies across all 12 BFMD matches, with 217 rallies from 2 held-out matches used purely for
+validation.
 
-## Repo layout
+We train two versions: a single-player variant that mimics the case where only one player is
+visible, and a two-player variant specialized for singles play. *[results table pending]*
 
-```
-1:Court/        camera calibration
-2:Player/       player detection + 3D pose
-3:Action/       hit detection / shot classification
-4:Shuttle/      shuttle trajectory reconstruction
-5.Evalutation/  supplementary calibration/validation scripts
-docs/           interactive demo site (served via GitHub Pages)
-result/         evaluation outputs
-```
+\textbf{(b) Hit detection and stroke classification}
+
+\vspace{2pt}
+\begin{tabular*}{\columnwidth}
+{@{\extracolsep{\fill}}lcccc@{}}
+\toprule
+Method & Prec. & Rec. & F1 & Stroke Acc. \\
+\midrule
+Chien--Yu$^{\dagger}$
+    & 69.2 & 97.9 & 81.1 & -- \\
+TrackNet$^{\dagger}$
+    & 58.8 & 93.6 & 72.3 & 38.8 \\
+Trajectory + action$^{\dagger}$
+    & 84.3 & 88.2 & 86.2 & 54.1 \\
+\midrule
+Ours (full-court)
+    & \textbf{92.4} & \textbf{93.0}
+    & \textbf{92.7} & \textbf{78.1} \\
+Ours (single-player)
+    & 91.5 & 91.0 & 91.3 & 75.9 \\
+\bottomrule
+\end{tabular*}
+
+make this table and also metion it their reported 
+
+## Datasets
+
+- **BFMD** — Ning Ding et al., *BFMD: A Full-Match Badminton Dense Dataset for Dense Shot
+  Captioning*, arXiv:2603.25533 (2026) [8]. 19 total matches (singles + doubles), 1,687 rallies; we
+  use the 12 singles matches with usable hit-timing ground truth.
+- **Drone doubles dataset** — Ning Ding et al., *Estimation of control area in badminton doubles
+  with pose information from top and back view drone videos*, Multimedia Tools and Applications
+  (2023) [7]. 39 games, 1,347 rallies total; we validate against 4 rallies (see Section 2).
+
+
+## References
+
+1. P. Liu & J.-H. Wang. "MonoTrack: Shuttle Trajectory Reconstruction From Monocular Badminton
+   Video." *CVPR Workshops (CVPRW)*, 2022.
+   [openaccess.thecvf.com](https://openaccess.thecvf.com/content/CVPR2022W/CVSports/html/Liu_MonoTrack_Shuttle_Trajectory_Reconstruction_From_Monocular_Badminton_Video_CVPRW_2022_paper.html)
+2. J. Wang, M. Chen, N. Karaev, A. Vedaldi, C. Rupprecht, D. Novotny. "VGGT: Visual Geometry
+   Grounded Transformer." *CVPR* (Best Paper Award), 2025. [arXiv:2503.11651](https://arxiv.org/abs/2503.11651)
+3. A. N. Raj & Prethija G. "CourtKeyNet: A novel octave-based architecture for precision badminton
+   court detection with geometric constraints." *Machine Learning with Applications*, 2026.
+   DOI: [10.1016/j.mlwa.2026.100884](https://www.sciencedirect.com/science/article/pii/S2666827026000496)
+4. Y. Wang, Z. Wang, L. Liu, K. Daniilidis. "TRAM: Global Trajectory and Motion of 3D Humans from
+   in-the-Wild Videos." *ECCV*, 2024. [arXiv:2403.17346](https://arxiv.org/abs/2403.17346)
+5. Y.-H. Chien & F. Yu. "Automated Hit-frame Detection for Badminton Match Analysis." arXiv:2307.16000, 2023.
+6. Y.-H. Hsu, C.-C. Yu, H.-Y. Cheng. "Enhancing Badminton Game Analysis: An Approach to Shot
+   Refinement via a Fusion of Shuttlecock Tracking and Hit Detection from Monocular Camera."
+   *Sensors*, 24(13), 4372, 2024. [mdpi.com](https://www.mdpi.com/1424-8220/24/13/4372)
+7. N. Ding, K. Takeda, W. Jin, Y. Bei, K. Fujii. "Estimation of control area in badminton doubles
+   with pose information from top and back view drone videos." *Multimedia Tools and Applications*, 2023.
+   [arXiv:2305.04247](https://arxiv.org/abs/2305.04247)
+8. N. Ding et al. "BFMD: A Full-Match Badminton Dense Dataset for Dense Shot Captioning."
+   arXiv:2603.25533, 2026. [github.com/Ning-D/BFMD](https://github.com/Ning-D/BFMD)
+9. YOLOv8 — G. Jocher, A. Chaurasia, J. Qiu. *Ultralytics YOLOv8*, 2023.
+
+---
