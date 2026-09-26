@@ -39,11 +39,10 @@ using a stable 2D ankle keypoint.
 
 On the badminton doubles dataset (Ding et al., 2023 [7]), which provides synchronized top-view and
 back-view drone footage, Birdseye reconstructs 3D player position from the back view alone and
-compares it against the top view's real annotated ground truth. Pooled across **4 rallies** (1,731
-frame-level position comparisons), median localization error is **0.39m** (mean 0.45m). Given that
-the average arm span of an adult male is roughly 1.8m, a meaningful share of this error is plausibly
-body-scale noise — a raised arm or racket alone can shift a player's "position" by a large fraction
-of that. The following table shows the percentage of frames within several tolerance thresholds:
+compares it against the top view's real annotated ground truth. Pooled across 20 rallies, median localization error is **0.39m** (mean 0.45m). Given that the average arm span of an adult male is 
+roughly 1.8m, a meaningful share of this error is plausibly body-scale noise such as a raised arm 
+alone can shift a player's "position" by a large fraction of that. Thus the following table shows the 
+percentage of frames within several tolerance thresholds:
 
 | Tolerance | % of frames within |
 |---|---|
