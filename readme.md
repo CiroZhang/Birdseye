@@ -66,30 +66,15 @@ validation.
 We train two versions: a single-player variant that mimics the case where only one player is
 visible, and a two-player variant specialized for singles play. *[results table pending]*
 
-\textbf{(b) Hit detection and stroke classification}
+| Method | Precision (%) | Recall (%) | F1 (%) | Stroke accuracy (%) |
+|---|---:|---:|---:|---:|
+| Chien–Yu† | 69.2 | 97.9 | 81.1 | — |
+| TrackNet† | 58.8 | 93.6 | 72.3 | 38.8 |
+| Trajectory + action† | 84.3 | 88.2 | 86.2 | 54.1 |
+| Ours (full-court) | **92.4** | **93.0** | **92.7** | **78.1** |
+| Ours (single-player) | 91.5 | 91.0 | 91.3 | 75.9 |
 
-\vspace{2pt}
-\begin{tabular*}{\columnwidth}
-{@{\extracolsep{\fill}}lcccc@{}}
-\toprule
-Method & Prec. & Rec. & F1 & Stroke Acc. \\
-\midrule
-Chien--Yu$^{\dagger}$
-    & 69.2 & 97.9 & 81.1 & -- \\
-TrackNet$^{\dagger}$
-    & 58.8 & 93.6 & 72.3 & 38.8 \\
-Trajectory + action$^{\dagger}$
-    & 84.3 & 88.2 & 86.2 & 54.1 \\
-\midrule
-Ours (full-court)
-    & \textbf{92.4} & \textbf{93.0}
-    & \textbf{92.7} & \textbf{78.1} \\
-Ours (single-player)
-    & 91.5 & 91.0 & 91.3 & 75.9 \\
-\bottomrule
-\end{tabular*}
-
-make this table and also metion it their reported 
+† Results reported by the respective original papers; they were not re-evaluated under our protocol.
 
 ## Datasets
 
@@ -125,3 +110,4 @@ make this table and also metion it their reported
 9. YOLOv8 — G. Jocher, A. Chaurasia, J. Qiu. *Ultralytics YOLOv8*, 2023.
 
 ---
+
