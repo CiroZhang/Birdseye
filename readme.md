@@ -6,6 +6,16 @@
 <p align="center">
   <a href="https://cirozhang.github.io/Birdseye/">
     <img
+      src="https://img.shields.io/badge/%E2%96%B6_LIVE_DEMO-View_the_reconstruction_in_action-2ea44f?style=for-the-badge"
+      alt="View the live demo"
+      height="64"
+    >
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://cirozhang.github.io/Birdseye/">
+    <img
       src="https://img.shields.io/badge/▶_LIVE_DEMO-View_the_reconstruction_in_action-2ea44f?style=for-the-badge"
       alt="Interactive Offline Demo"
       height="64"
