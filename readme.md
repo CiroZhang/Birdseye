@@ -60,6 +60,12 @@ percentage of frames within several tolerance thresholds:
 | 0.8m | 88.6% |
 | 1.0m | 93.2% |
 
+<p align="center">
+  <a href="https://cirozhang.github.io/Birdseye/">
+    <img src="demo_example.png" alt="Birdseye demo preview">
+  </a>
+</p>
+
 ## 3. Hit Detection and Shot Classification
 
 To further demonstrate the effectiveness of Birdseye's representation, we use a transformer encoder
