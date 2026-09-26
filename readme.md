@@ -53,27 +53,18 @@ percentage of frames within several tolerance thresholds:
 ## 3. Hit Detection and Shot Classification
 
 To further demonstrate the effectiveness of Birdseye's representation, we use a transformer encoder
-(6 heads, 4 layers, 192-dim) over 3D skeleton motion — root-relative joint position, velocity,
-acceleration, for both players, with the far player canonically rotated 180° — to predict per-frame
-hit probability and shot type (12 classes), trained on BFMD's real hit-timing labels (the only
-manual annotation used anywhere in this pipeline).
-
-**Train/test split:** match-level holdout, not rally-level (to prevent same-match/camera leakage) —
-1,055 rallies across all 12 BFMD matches, with 217 rallies from 2 held-out matches used purely for
-validation.
-
-We train two versions: a single-player variant that mimics the case where only one player is
-visible, and a two-player variant specialized for singles play. *[results table pending]*
+(6 heads, 4 layers, 192-dim) over 3D skeleton motion to predict per-frame hit probability and shot type 
+(12 classes), trained on BFMD's real hit-timing labels. We train two versions: a single-player variant hide one player which mimics the case where only one is visible, and a two-player variant specialized for singles play. Within the BFMD dataset 217/1,055 rallies are use as the test set for evaluation. The results are shown below"
 
 | Method | Precision (%) | Recall (%) | F1 (%) | Stroke accuracy (%) |
 |---|---:|---:|---:|---:|
-| Chien–Yu† | 69.2 | 97.9 | 81.1 | — |
-| TrackNet† | 58.8 | 93.6 | 72.3 | 38.8 |
-| Trajectory + action† | 84.3 | 88.2 | 86.2 | 54.1 |
+| Chien–Yu† [5] | 69.2 | 97.9 | 81.1 | — |
+| TrackNet† [6]| 58.8 | 93.6 | 72.3 | 38.8 |
+| Trajectory + action† [6]| 84.3 | 88.2 | 86.2 | 54.1 |
 | Ours (full-court) | **92.4** | **93.0** | **92.7** | **78.1** |
 | Ours (single-player) | 91.5 | 91.0 | 91.3 | 75.9 |
 
-† Results reported by the respective original papers; they were not re-evaluated under our protocol.
+† Results reported by the respective original papers, not re-evaluated under BFMD.
 
 ## Datasets
 
@@ -83,6 +74,7 @@ visible, and a two-player variant specialized for singles play. *[results table 
 - **Drone doubles dataset** — Ning Ding et al., *Estimation of control area in badminton doubles
   with pose information from top and back view drone videos*, Multimedia Tools and Applications
   (2023) [7]. 39 games, 1,347 rallies total; we validate against 4 rallies (see Section 2).
+
 
 
 ## References
