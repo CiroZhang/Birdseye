@@ -62,7 +62,7 @@ percentage of frames within several tolerance thresholds:
 
 <p align="center">
   <a href="https://cirozhang.github.io/Birdseye/">
-    <img src="demo_example.png" alt="Birdseye demo preview">
+    <img src="demo_examples.png" alt="Birdseye demo preview">
   </a>
 </p>
 
